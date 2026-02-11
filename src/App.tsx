@@ -143,30 +143,27 @@ function App() {
   useEffect(() => {
     if (!currentOrderId) return
 
-    const base = import.meta.env.VITE_API_BASE_URL ?? ''
-    const url = `${base}/api/orders/${currentOrderId}/stream`
-    const eventSource = new EventSource(url)
+    let cancelled = false
 
-    eventSource.onmessage = (event) => {
+    const intervalId = window.setInterval(async () => {
       try {
-        const data = JSON.parse(event.data) as { status?: OrderStatus }
-        if (data.status) {
-          setOrderStatus(data.status)
-          if (data.status === 'delivered') {
-            eventSource.close()
-          }
+        const response = await apiFetch(`/api/orders/${currentOrderId}`)
+        if (!response.ok) return
+        const order: { status: OrderStatus } = await response.json()
+        if (!cancelled) {
+          setOrderStatus(order.status)
+        }
+        if (order.status === 'delivered') {
+          window.clearInterval(intervalId)
         }
       } catch {
-        // ignore malformed events
+        // ignore errors, keep last known status
       }
-    }
-
-    eventSource.onerror = () => {
-      eventSource.close()
-    }
+    }, 4000)
 
     return () => {
-      eventSource.close()
+      cancelled = true
+      window.clearInterval(intervalId)
     }
   }, [currentOrderId])
 
